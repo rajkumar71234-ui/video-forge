@@ -15,13 +15,17 @@ from bgm import MOODS
 from ffmpeg_utils import require_ffmpeg
 from subject import STYLES
 
+# force=True matters: uvicorn installs its own root handlers before importing
+# this module, and a plain basicConfig() is a no-op once handlers exist - which
+# is why progress lines never reached the host's log viewer.
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    force=True,
 )
 log = logging.getLogger("videoforge")
 
-INDEX_HTML = Path(__file__).resolve().parent / "index.html"
+INDEX_HTML = Path(__file__).resolve().parent / "ui.htm"
 
 ALLOWED_IMAGE = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".bmp"}
 ALLOWED_AUDIO = {".mp3", ".m4a", ".aac", ".wav", ".ogg", ".opus", ".oga", ".webm", ".flac"}
@@ -67,6 +71,8 @@ async def health() -> dict:
         "max_upload_mb": settings.max_upload_mb,
         "styles": list(STYLES),
         "moods": list(MOODS) + ["none"],
+        "vidgen_enabled": settings.enable_vidgen,
+        "vidgen_seconds": settings.vidgen_seconds,
     }
 
 
@@ -75,21 +81,36 @@ async def create_job(
     background_tasks: BackgroundTasks,
     prompt: str = Form(..., min_length=3, max_length=1200),
     photo: UploadFile = File(...),
-    voice: UploadFile = File(...),
+    voice: UploadFile | None = File(None),
     music: UploadFile | None = File(None),
+    mode: str = Form("composite"),
+    dialogue: str = Form(""),
     style: str = Form("card"),
     mood: str = Form("calm"),
     motion: str = Form("auto"),
     bgm_volume: float = Form(0.22),
     captions: bool = Form(False),
 ) -> JSONResponse:
+    if mode not in ("composite", "aigen"):
+        raise HTTPException(400, "mode must be 'composite' or 'aigen'")
+    if mode == "aigen" and not settings.enable_vidgen:
+        raise HTTPException(
+            400,
+            "AI video mode is not enabled on this server. Set ENABLE_VIDGEN=true "
+            "and enable billing on the Gemini API key.",
+        )
     if style not in STYLES:
         raise HTTPException(400, f"style must be one of {list(STYLES)}")
     if mood not in MOODS and mood != "none":
         raise HTTPException(400, f"mood must be one of {list(MOODS) + ['none']}")
+    # Composite mode is driven by the voice note, so it is required there.
+    if mode == "composite" and (voice is None or not voice.filename):
+        raise HTTPException(400, "Composite mode needs a voice note.")
 
     job = store.create(
         prompt=prompt.strip(),
+        mode=mode,
+        dialogue=dialogue.strip()[:400],
         style=style,
         mood=mood,
         motion=motion,
@@ -101,7 +122,8 @@ async def create_job(
 
     try:
         job.photo_path = await _save(photo, wd, "photo", ALLOWED_IMAGE)
-        job.voice_path = await _save(voice, wd, "voice", ALLOWED_AUDIO)
+        if voice is not None and voice.filename:
+            job.voice_path = await _save(voice, wd, "voice", ALLOWED_AUDIO)
         if music is not None and music.filename:
             job.bgm_path = await _save(music, wd, "music", ALLOWED_AUDIO)
     except HTTPException:

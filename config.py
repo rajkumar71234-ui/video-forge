@@ -39,6 +39,18 @@ class Settings(BaseSettings):
         validation_alias="GEMINI_API_BASE",
     )
 
+    # ---- AI video generation (beta) ----------------------------------
+    # Off by default: every generated clip costs real money, so it must be
+    # switched on deliberately rather than discovered by accident.
+    enable_vidgen: bool = Field(False, validation_alias="ENABLE_VIDGEN")
+    omni_model: str = Field(
+        "gemini-omni-flash-preview", validation_alias="OMNI_MODEL"
+    )
+    # Generation blocks for a long time; this bounds it so a stuck job fails
+    # loudly instead of sitting at 70% forever.
+    vidgen_timeout_sec: float = Field(600.0, validation_alias="VIDGEN_TIMEOUT_SEC")
+    vidgen_seconds: int = Field(8, validation_alias="VIDGEN_SECONDS")
+
     # ---- Storage -----------------------------------------------------
     data_dir: Path = Field(BASE_DIR / "data", validation_alias="DATA_DIR")
     assets_dir: Path = Field(BASE_DIR / "assets", validation_alias="ASSETS_DIR")

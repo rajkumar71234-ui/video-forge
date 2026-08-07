@@ -32,11 +32,15 @@ Status = Literal["queued", "running", "done", "error"]
 class Job:
     id: str
     prompt: str
+    # "composite" = still photo over an AI background (free, fast)
+    # "aigen"     = Omni Flash generates real footage of the person (paid)
+    mode: str = "composite"
     style: str = "card"
     mood: str = "calm"
     bgm_volume: float = 0.22
     captions: bool = False
     motion: str = "auto"
+    dialogue: str = ""
 
     status: Status = "queued"
     progress: int = 0
@@ -60,6 +64,9 @@ class Job:
             "progress": self.progress,
             "step": self.step,
             "error": self.error,
+            "mode": self.mode,
+            # Elapsed seconds, so a slow render doesn't look like a frozen one.
+            "elapsed": round((self.finished_at or time.time()) - self.created_at),
             "duration": round(self.duration, 1) if self.duration else None,
             "video_url": f"/api/jobs/{self.id}/video" if self.status == "done" else None,
             "thumb_url": (
@@ -118,13 +125,18 @@ def _set(job: Job, progress: int, step: str) -> None:
 
 
 async def _process(job: Job) -> None:
-    assert job.workdir and job.photo_path and job.voice_path
+    assert job.workdir and job.photo_path
     wd = job.workdir
     loop = asyncio.get_running_loop()
 
     try:
         job.status = "running"
 
+        if job.mode == "aigen":
+            await _process_aigen(job, wd)
+            return
+
+        assert job.voice_path
         # 1. How long is the video? The voice note decides.
         _set(job, 5, "Reading your voice note")
         voice_dur = await probe_duration(job.voice_path)
@@ -199,3 +211,47 @@ async def _process(job: Job) -> None:
         job.error = str(exc)[:600]
         job.step = "Failed"
         job.finished_at = time.time()
+
+
+async def _process_aigen(job: Job, wd: Path) -> None:
+    """AI-generated footage of the person, via Gemini Omni Flash.
+
+    Deliberately does NOT run the ffmpeg compositor: the model returns a
+    finished clip with its own audio, so re-encoding would only cost quality
+    and CPU. The uploaded voice note is not used - the API rejects audio
+    references, so the spoken line comes out in a model voice.
+    """
+    import vidgen
+
+    if not settings.enable_vidgen:
+        raise ValueError(
+            "AI video mode is switched off. Set ENABLE_VIDGEN=true and make "
+            "sure billing is enabled on your Gemini API key. Note that each "
+            "clip costs money, unlike Composite mode."
+        )
+
+    _set(job, 10, "Preparing the request")
+    seconds = settings.vidgen_seconds
+    prompt = vidgen.build_prompt(job.prompt, job.dialogue, seconds)
+    log.info("[%s] omni prompt:\n%s", job.id, prompt)
+
+    _set(job, 25, f"Generating {seconds}s of video (can take several minutes)")
+    provider = vidgen.OmniVideoProvider()
+    out = wd / "output.mp4"
+    await provider.generate(photo=job.photo_path, prompt=prompt, out_path=out)
+
+    if not out.exists() or out.stat().st_size < 10_000:
+        raise ValueError("The model returned an empty video file.")
+
+    job.video_path = out
+    try:
+        job.duration = await probe_duration(out)
+    except Exception:  # noqa: BLE001 - duration is cosmetic
+        job.duration = float(seconds)
+
+    _set(job, 90, "Creating the preview")
+    job.thumb_path = await compose.make_thumbnail(out, wd / "thumb.jpg")
+
+    job.status = "done"
+    job.finished_at = time.time()
+    _set(job, 100, "Done")
