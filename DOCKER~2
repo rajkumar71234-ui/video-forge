@@ -1,0 +1,11 @@
+.env
+data/
+assets/
+.git/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.mp4
+README.md
+test_e2e.py

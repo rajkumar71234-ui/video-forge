@@ -1,0 +1,26 @@
+# Copy to .env for local development. Never commit the real .env.
+
+# --- AI image backend ------------------------------------------------
+# gemini = real AI backgrounds (needs a key)
+# stub   = offline procedural gradients, no key, no cost, good for testing
+IMAGE_PROVIDER=gemini
+GEMINI_API_KEY=
+GEMINI_IMAGE_MODEL=gemini-2.5-flash-image
+GEMINI_TEXT_MODEL=gemini-2.5-flash
+
+# --- Features --------------------------------------------------------
+ENABLE_CAPTIONS=true
+ENABLE_CUTOUT=false          # uncomment rembg in requirements.txt first
+
+# --- Video output ----------------------------------------------------
+VIDEO_WIDTH=1920
+VIDEO_HEIGHT=1080
+VIDEO_FPS=30
+VIDEO_PRESET=veryfast
+VIDEO_CRF=23
+
+# --- Limits ----------------------------------------------------------
+MAX_UPLOAD_MB=25
+MAX_DURATION_SEC=180
+MAX_CONCURRENT_RENDERS=1
+JOB_TTL_MINUTES=120

@@ -1,0 +1,9 @@
+.env
+data/
+assets/bgm/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.DS_Store
+*.mp4

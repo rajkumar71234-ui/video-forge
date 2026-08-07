@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Video Forge — photo + voice → video</title>
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#141821; --panel2:#1b202c; --line:#262c3a;
+    --txt:#e8ecf4; --muted:#8b93a7; --accent:#6c8cff; --accent2:#38d39f;
+    --danger:#ff6b6b; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--txt); min-height:100vh;
+    font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 20px 80px}
+  header{margin-bottom:28px}
+  h1{margin:0 0 6px;font-size:26px;letter-spacing:-.02em}
+  h1 span{color:var(--accent)}
+  .sub{color:var(--muted);margin:0;font-size:14px}
+  .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:20px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px}
+  .card h2{margin:0 0 14px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+  label{display:block;font-size:13px;color:var(--muted);margin:0 0 6px}
+  textarea,select,input[type=range]{width:100%;font:inherit}
+  textarea{
+    background:var(--panel2);border:1px solid var(--line);border-radius:10px;
+    color:var(--txt);padding:12px;resize:vertical;min-height:96px;
+  }
+  textarea:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  select{background:var(--panel2);border:1px solid var(--line);border-radius:10px;color:var(--txt);padding:10px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}
+  .drop{
+    border:1.5px dashed var(--line);border-radius:12px;padding:16px;text-align:center;
+    cursor:pointer;transition:.15s;background:var(--panel2);
+  }
+  .drop:hover,.drop.over{border-color:var(--accent);background:#1e2433}
+  .drop.filled{border-style:solid;border-color:var(--accent2)}
+  .drop .t{font-size:13px;font-weight:600}
+  .drop .h{font-size:12px;color:var(--muted);margin-top:3px;word-break:break-all}
+  .drop img{max-height:84px;border-radius:8px;margin-top:8px;display:block;margin-inline:auto}
+  .drop audio{width:100%;margin-top:8px;height:32px}
+  input[type=file]{display:none}
+  .mini{font-size:12px;color:var(--muted);margin-top:10px}
+  .switch{display:flex;align-items:center;gap:9px;margin-top:14px;font-size:14px;color:var(--txt);cursor:pointer}
+  .switch input{width:16px;height:16px;accent-color:var(--accent)}
+  button.go{
+    width:100%;margin-top:18px;padding:13px;border:0;border-radius:11px;
+    background:var(--accent);color:#fff;font:600 15px/1 inherit;cursor:pointer;transition:.15s;
+  }
+  button.go:hover:not(:disabled){background:#5a7bff}
+  button.go:disabled{opacity:.45;cursor:not-allowed}
+  .status{display:none;margin-top:4px}
+  .status.on{display:block}
+  .bar{height:7px;background:var(--panel2);border-radius:99px;overflow:hidden;margin:10px 0 8px}
+  .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent2));transition:width .4s}
+  .step{font-size:13px;color:var(--muted)}
+  .err{color:var(--danger);font-size:13px;background:#2a1618;border:1px solid #4a2226;padding:10px 12px;border-radius:10px;margin-top:10px;white-space:pre-wrap}
+  video{width:100%;border-radius:10px;background:#000;margin-top:6px}
+  .dl{
+    display:inline-block;margin-top:10px;padding:10px 16px;background:var(--accent2);
+    color:#04120c;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px;
+  }
+  .empty{color:var(--muted);font-size:13px;text-align:center;padding:34px 10px;border:1px dashed var(--line);border-radius:12px}
+  .val{float:right;color:var(--txt);font-variant-numeric:tabular-nums}
+  footer{margin-top:34px;color:var(--muted);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Video <span>Forge</span></h1>
+    <p class="sub">Upload a photo and a voice note, describe the scene, and get a finished video with an AI background and music.</p>
+  </header>
+
+  <div class="grid">
+    <!-- ------------------------------------------------ input -->
+    <form class="card" id="form">
+      <h2>1 · Your material</h2>
+
+      <div class="row" style="margin-top:0">
+        <div class="drop" id="dropPhoto">
+          <div class="t">📷 Photo</div>
+          <div class="h" id="photoHint">Click or drop · jpg, png, webp</div>
+          <img id="photoPrev" hidden alt="" />
+          <input type="file" id="photo" accept="image/*" />
+        </div>
+
+        <div class="drop" id="dropVoice">
+          <div class="t">🎙️ Voice note</div>
+          <div class="h" id="voiceHint">Click or drop · mp3, m4a, ogg, opus</div>
+          <audio id="voicePrev" controls hidden></audio>
+          <input type="file" id="voice" accept="audio/*" />
+        </div>
+      </div>
+
+      <p class="mini">The voice note sets the video length. WhatsApp voice notes (.opus) work as-is.</p>
+
+      <h2 style="margin-top:22px">2 · The scene</h2>
+      <label for="prompt">Describe the background you want</label>
+      <textarea id="prompt" placeholder="A warm sunrise over the Chennai coastline, soft golden haze, calm sea, cinematic wide shot"></textarea>
+
+      <h2 style="margin-top:22px">3 · Look &amp; sound</h2>
+      <div class="row" style="margin-top:0">
+        <div>
+          <label for="style">Photo treatment</label>
+          <select id="style">
+            <option value="card">Framed card</option>
+            <option value="circle">Circle portrait</option>
+            <option value="cutout">AI cut-out (if enabled)</option>
+          </select>
+        </div>
+        <div>
+          <label for="motion">Camera move</label>
+          <select id="motion">
+            <option value="auto">Auto</option>
+            <option value="zoom_in">Slow zoom in</option>
+            <option value="zoom_out">Slow zoom out</option>
+            <option value="pan_right">Pan right</option>
+            <option value="pan_left">Pan left</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row">
+        <div>
+          <label for="mood">Music</label>
+          <select id="mood">
+            <option value="calm">Calm</option>
+            <option value="uplifting">Uplifting</option>
+            <option value="cinematic">Cinematic</option>
+            <option value="warm">Warm</option>
+            <option value="none">No music</option>
+          </select>
+        </div>
+        <div>
+          <label for="vol">Music level <span class="val" id="volVal">22%</span></label>
+          <input type="range" id="vol" min="0" max="60" value="22" />
+        </div>
+      </div>
+
+      <div class="drop" id="dropMusic" style="margin-top:12px;padding:12px">
+        <div class="t">🎵 Own music (optional)</div>
+        <div class="h" id="musicHint">Overrides the built-in track</div>
+        <input type="file" id="music" accept="audio/*" />
+      </div>
+
+      <label class="switch"><input type="checkbox" id="captions" /> Burn in captions from the voice note</label>
+
+      <button class="go" id="go" type="submit">Create video</button>
+      <div class="err" id="formErr" hidden></div>
+    </form>
+
+    <!-- ------------------------------------------------ output -->
+    <div class="card">
+      <h2>Result</h2>
+
+      <div class="empty" id="empty">Nothing rendered yet.</div>
+
+      <div class="status" id="status">
+        <div class="bar"><i id="barFill"></i></div>
+        <div class="step" id="stepTxt">Queued…</div>
+        <div class="err" id="jobErr" hidden></div>
+      </div>
+
+      <div id="result" hidden>
+        <video id="player" controls playsinline></video>
+        <a class="dl" id="dl" download>⬇ Download MP4</a>
+      </div>
+
+      <p class="mini" id="cfg"></p>
+    </div>
+  </div>
+
+  <footer>Video Forge · music is synthesized at render time and free to use commercially.</footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const files = { photo: null, voice: null, music: null };
+let poller = null;
+
+/* ---- file pickers with drag & drop ---------------------------------- */
+function wireDrop(dropId, inputId, key, onPick) {
+  const drop = $(dropId), input = $(inputId);
+  drop.addEventListener('click', (e) => { if (e.target.tagName !== 'AUDIO') input.click(); });
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+  drop.addEventListener('drop', (e) => {
+    e.preventDefault(); drop.classList.remove('over');
+    if (e.dataTransfer.files.length) { input.files = e.dataTransfer.files; input.dispatchEvent(new Event('change')); }
+  });
+  input.addEventListener('change', () => {
+    const f = input.files[0];
+    files[key] = f || null;
+    drop.classList.toggle('filled', !!f);
+    onPick(f, drop);
+    validate();
+  });
+}
+
+wireDrop('dropPhoto', 'photo', 'photo', (f) => {
+  const img = $('photoPrev');
+  if (!f) { img.hidden = true; $('photoHint').textContent = 'Click or drop · jpg, png, webp'; return; }
+  $('photoHint').textContent = f.name;
+  img.src = URL.createObjectURL(f); img.hidden = false;
+});
+
+wireDrop('dropVoice', 'voice', 'voice', (f) => {
+  const au = $('voicePrev');
+  if (!f) { au.hidden = true; $('voiceHint').textContent = 'Click or drop · mp3, m4a, ogg, opus'; return; }
+  $('voiceHint').textContent = f.name;
+  au.src = URL.createObjectURL(f); au.hidden = false;
+});
+
+wireDrop('dropMusic', 'music', 'music', (f) => {
+  $('musicHint').textContent = f ? f.name : 'Overrides the built-in track';
+});
+
+$('vol').addEventListener('input', (e) => { $('volVal').textContent = e.target.value + '%'; });
+$('prompt').addEventListener('input', validate);
+
+function validate() {
+  $('go').disabled = !(files.photo && files.voice && $('prompt').value.trim().length >= 3);
+}
+validate();
+
+/* ---- submit --------------------------------------------------------- */
+$('form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('formErr').hidden = true;
+  $('go').disabled = true; $('go').textContent = 'Uploading…';
+
+  const fd = new FormData();
+  fd.append('prompt', $('prompt').value.trim());
+  fd.append('photo', files.photo);
+  fd.append('voice', files.voice);
+  if (files.music) fd.append('music', files.music);
+  fd.append('style', $('style').value);
+  fd.append('mood', $('mood').value);
+  fd.append('motion', $('motion').value);
+  fd.append('bgm_volume', (Number($('vol').value) / 100).toFixed(2));
+  fd.append('captions', $('captions').checked ? 'true' : 'false');
+
+  try {
+    const r = await fetch('/api/jobs', { method: 'POST', body: fd });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || 'Upload failed');
+    startPolling(data.id);
+  } catch (err) {
+    $('formErr').textContent = err.message;
+    $('formErr').hidden = false;
+    $('go').disabled = false; $('go').textContent = 'Create video';
+  }
+});
+
+/* ---- progress ------------------------------------------------------- */
+function startPolling(id) {
+  $('empty').hidden = true;
+  $('result').hidden = true;
+  $('jobErr').hidden = true;
+  $('status').classList.add('on');
+  setProgress(0, 'Queued…');
+  $('go').textContent = 'Rendering…';
+
+  clearInterval(poller);
+  poller = setInterval(async () => {
+    try {
+      const r = await fetch('/api/jobs/' + id);
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.detail || 'Lost the job');
+      setProgress(j.progress, j.step);
+
+      if (j.status === 'done') {
+        clearInterval(poller);
+        $('player').src = j.video_url;
+        $('dl').href = j.video_url;
+        $('result').hidden = false;
+        $('status').classList.remove('on');
+        resetButton();
+      } else if (j.status === 'error') {
+        clearInterval(poller);
+        $('jobErr').textContent = j.error || 'Render failed.';
+        $('jobErr').hidden = false;
+        resetButton();
+      }
+    } catch (err) {
+      clearInterval(poller);
+      $('jobErr').textContent = err.message;
+      $('jobErr').hidden = false;
+      resetButton();
+    }
+  }, 1500);
+}
+
+function setProgress(pct, step) {
+  $('barFill').style.width = pct + '%';
+  $('stepTxt').textContent = step + ' · ' + pct + '%';
+}
+function resetButton() {
+  $('go').disabled = false;
+  $('go').textContent = 'Create video';
+  validate();
+}
+
+/* ---- config banner -------------------------------------------------- */
+fetch('/api/health').then(r => r.json()).then(h => {
+  $('cfg').textContent =
+    `Backend: ${h.provider} · captions ${h.captions_enabled ? 'on' : 'off'} · ` +
+    `AI cut-out ${h.cutout_enabled ? 'on' : 'off'} · max ${h.max_duration_sec}s, ${h.max_upload_mb} MB per file`;
+  if (!h.cutout_enabled) {
+    const opt = document.querySelector('#style option[value=cutout]');
+    if (opt) opt.textContent = 'AI cut-out (disabled — falls back to card)';
+  }
+}).catch(() => {});
+</script>
+</body>
+</html>

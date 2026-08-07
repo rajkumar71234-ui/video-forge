@@ -1,0 +1,35 @@
+# Render blueprint. Render reads this automatically when you connect the repo.
+# Set GEMINI_API_KEY in the Render dashboard - sync:false keeps it out of git.
+services:
+  - type: web
+    name: video-forge
+    runtime: docker
+    plan: free            # bump to "starter" for faster renders and no cold starts
+    region: singapore     # closest Render region to India
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: IMAGE_PROVIDER
+        value: stub       # switch to "gemini" once your API key is set
+      - key: GEMINI_IMAGE_MODEL
+        value: gemini-2.5-flash-image
+      - key: ENABLE_CAPTIONS
+        value: "true"
+      - key: ENABLE_CUTOUT
+        value: "false"    # needs rembg + onnxruntime; too heavy for the free plan
+      - key: MAX_DURATION_SEC
+        value: "120"      # free plan requests time out around 15 min - stay under
+      - key: MAX_UPLOAD_MB
+        value: "25"
+      - key: MAX_CONCURRENT_RENDERS
+        value: "1"
+      - key: VIDEO_WIDTH
+        value: "1280"     # 720p on the free plan; set 1920 on a paid plan
+      - key: VIDEO_HEIGHT
+        value: "720"
+      - key: VIDEO_PRESET
+        value: veryfast
+      - key: JOB_TTL_MINUTES
+        value: "60"
