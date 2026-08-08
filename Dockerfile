@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Flat layout: every source file sits in one directory.
 COPY *.py .
-COPY index.html .
+COPY *.htm* .
 
 RUN mkdir -p /app/data /app/assets
 ENV DATA_DIR=/app/data ASSETS_DIR=/app/assets
