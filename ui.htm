@@ -65,8 +65,8 @@
     color:#04120c;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px;
   }
   .empty{color:var(--muted);font-size:13px;text-align:center;padding:34px 10px;border:1px dashed var(--line);border-radius:12px}
-  .modes{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-  @media(max-width:520px){.modes{grid-template-columns:1fr}}
+  .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  @media(max-width:640px){.modes{grid-template-columns:1fr}}
   .mode{
     display:block;border:1.5px solid var(--line);border-radius:12px;padding:11px 13px;
     background:var(--panel2);cursor:pointer;transition:.15s;margin:0;
@@ -101,6 +101,11 @@
           <input type="radio" name="mode" value="composite" checked />
           <b>Composite</b>
           <span>Your photo moves over an AI background. Free, no API key.</span>
+        </label>
+        <label class="mode" id="modeScene">
+          <input type="radio" name="mode" value="scene" />
+          <b>Scene <i>free</i></b>
+          <span id="sceneHint">You are redrawn inside the scene. Free tier, needs an API key.</span>
         </label>
         <label class="mode" id="modeAi">
           <input type="radio" name="mode" value="aigen" />
@@ -265,17 +270,27 @@ function currentMode() {
 }
 
 function onModeChange() {
-  const ai = currentMode() === 'aigen';
+  const mode = currentMode();
+  const ai = mode === 'aigen';
+  const scene = mode === 'scene';
   document.querySelectorAll('.mode').forEach(m => {
     m.classList.toggle('on', m.querySelector('input').checked);
   });
   $('dialogueWrap').hidden = !ai;
-  $('promptLabel').textContent = ai
-    ? 'Describe what the person should DO'
+
+  // Composite prompts describe the BACKGROUND; scene/AI prompts describe
+  // what the person is DOING. Wrong wording here is the main cause of
+  // disappointing output, so the label changes with the mode.
+  $('promptLabel').textContent = (ai || scene)
+    ? 'Describe what YOU should be doing'
     : 'Describe the background you want';
-  $('prompt').placeholder = ai
-    ? 'is swimming in a clear blue sea and gently touches a dolphin swimming beside him'
+  $('prompt').placeholder = (ai || scene)
+    ? 'swimming in a clear blue sea, gently touching a dolphin beside you'
     : 'A warm sunrise over the Chennai coastline, soft golden haze, calm sea, cinematic wide shot';
+
+  // Photo treatment only applies when there is a photo card to style.
+  const styleSel = $('style');
+  if (styleSel) styleSel.disabled = ai || scene;
   // In AI mode the model makes its own audio, so the voice note is optional.
   $('dropVoice').style.opacity = ai ? 0.5 : 1;
   validate();
@@ -381,9 +396,16 @@ function resetButton() {
 /* ---- config banner -------------------------------------------------- */
 fetch('/api/health').then(r => r.json()).then(h => {
   $('cfg').textContent =
-    `Backend: ${h.provider} · captions ${h.captions_enabled ? 'on' : 'off'} · ` +
+    `Backend: ${h.provider} · Scene ${h.scene_enabled ? 'on' : 'off'} · ` +
     `AI video ${h.vidgen_enabled ? 'on' : 'off'} · ` +
     `max ${h.max_duration_sec}s, ${h.max_upload_mb} MB per file`;
+
+  if (!h.scene_enabled) {
+    const box = $('modeScene');
+    box.classList.add('off');
+    box.querySelector('input').disabled = true;
+    $('sceneHint').textContent = 'Needs GEMINI_API_KEY on the server — free tier is enough.';
+  }
 
   if (!h.cutout_enabled) {
     const opt = document.querySelector('#style option[value=cutout]');

@@ -73,6 +73,8 @@ async def health() -> dict:
         "moods": list(MOODS) + ["none"],
         "vidgen_enabled": settings.enable_vidgen,
         "vidgen_seconds": settings.vidgen_seconds,
+        # Scene mode only needs a key, not billing.
+        "scene_enabled": bool(settings.gemini_api_key),
     }
 
 
@@ -91,8 +93,14 @@ async def create_job(
     bgm_volume: float = Form(0.22),
     captions: bool = Form(False),
 ) -> JSONResponse:
-    if mode not in ("composite", "aigen"):
-        raise HTTPException(400, "mode must be 'composite' or 'aigen'")
+    if mode not in ("composite", "scene", "aigen"):
+        raise HTTPException(400, "mode must be 'composite', 'scene' or 'aigen'")
+    if mode == "scene" and not settings.gemini_api_key:
+        raise HTTPException(
+            400,
+            "Scene mode needs GEMINI_API_KEY set on the server. The free tier "
+            "is enough. Use Composite mode meanwhile - it needs no key.",
+        )
     if mode == "aigen" and not settings.enable_vidgen:
         raise HTTPException(
             400,
@@ -103,9 +111,9 @@ async def create_job(
         raise HTTPException(400, f"style must be one of {list(STYLES)}")
     if mood not in MOODS and mood != "none":
         raise HTTPException(400, f"mood must be one of {list(MOODS) + ['none']}")
-    # Composite mode is driven by the voice note, so it is required there.
-    if mode == "composite" and (voice is None or not voice.filename):
-        raise HTTPException(400, "Composite mode needs a voice note.")
+    # Composite and Scene are both driven by the voice note's length.
+    if mode in ("composite", "scene") and (voice is None or not voice.filename):
+        raise HTTPException(400, f"{mode.title()} mode needs a voice note.")
 
     job = store.create(
         prompt=prompt.strip(),

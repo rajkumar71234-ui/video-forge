@@ -32,8 +32,9 @@ Status = Literal["queued", "running", "done", "error"]
 class Job:
     id: str
     prompt: str
-    # "composite" = still photo over an AI background (free, fast)
-    # "aigen"     = Omni Flash generates real footage of the person (paid)
+    # "composite" = still photo framed over an AI background (free, no key)
+    # "scene"     = person redrawn inside the scene         (free tier + key)
+    # "aigen"     = real generated footage of the person    (paid only)
     mode: str = "composite"
     style: str = "card"
     mood: str = "calm"
@@ -145,23 +146,38 @@ async def _process(job: Job) -> None:
         capped = min(voice_dur, settings.max_duration_sec)
         job.duration = capped + compose.TAIL_SECONDS
 
-        # 2. Background from the prompt.
-        _set(job, 15, "Generating the background")
-        provider = get_provider()
+        # 2. The picture behind everything.
         bg_path = wd / "background.png"
-        await provider.generate(job.prompt, bg_path, settings.width, settings.height)
+        subj_path: Path | None = None
+        subj_h: int | None = None
 
-        # 3. Prepare the photo layer. Pillow is blocking - keep it off the loop.
-        _set(job, 40, "Preparing your photo")
-        subj_path = wd / "subject.png"
-        _, _, subj_h = await loop.run_in_executor(
-            None,
-            lambda: subject_mod.build_subject_layer(
-                job.photo_path, subj_path, style=job.style,
-                # Height of the visible photo; the shadow adds ~12% on top.
-                target_height=int(settings.height * 0.58),
-            ),
-        )
+        if job.mode == "scene":
+            # The person is drawn INTO the image, so there is no card to overlay.
+            _set(job, 15, "Putting you in the scene")
+            import scene as scene_mod
+
+            await scene_mod.generate_scene(
+                job.photo_path, job.prompt, bg_path,
+                settings.width, settings.height,
+            )
+        else:
+            _set(job, 15, "Generating the background")
+            provider = get_provider()
+            await provider.generate(
+                job.prompt, bg_path, settings.width, settings.height
+            )
+
+            # 3. Photo layer. Pillow is blocking - keep it off the event loop.
+            _set(job, 40, "Preparing your photo")
+            subj_path = wd / "subject.png"
+            _, _, subj_h = await loop.run_in_executor(
+                None,
+                lambda: subject_mod.build_subject_layer(
+                    job.photo_path, subj_path, style=job.style,
+                    # Height of the visible photo; shadow adds ~12% on top.
+                    target_height=int(settings.height * 0.58),
+                ),
+            )
 
         # 4. Captions (best-effort, never fatal).
         srt: Path | None = None
